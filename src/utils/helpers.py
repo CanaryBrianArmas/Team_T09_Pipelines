@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -44,7 +46,8 @@ def non_gaussian_pipeline():
     grid_search.fit(X, y)
     
     print("Best Poisson Regression Params:", grid_search.best_params_)
-    save_model(grid_search.best_estimator_, '../models/poisson_pipeline.pkl')
+    save_model(grid_search.best_estimator_, '../models/poisson_pipeline_model.pkl')
+    
     return grid_search
 
 
@@ -121,7 +124,8 @@ def save_model(model, file_path: str):
 
 def train_pipeline():
     """
-    Main function to train and save the pipeline
+    Main function to train the regression pipeline
+    and save the best model
     
     Steps:
     1. Load training data
@@ -129,13 +133,21 @@ def train_pipeline():
     3. Create complete pipeline
     4. Perform grid search
     5. Save best model
+
+    Returns:
+    GridSearchCV: Best model found
     """
     # Load data
     train_df = load_data('../data/train.csv')
+
+    # show stats and target
+    print(train_df.info())
+    sns.histplot(train_df['INCOME'])
+    plt.show()
     
     # Split features and target
-    X = train_df.drop('earnings', axis=1)
-    y = train_df['earnings']
+    X = train_df.drop('INCOME', axis=1)
+    y = train_df['INCOME']
     
     # Define models to compare
     models = {
@@ -199,13 +211,16 @@ def train_pipeline():
     grid_search.fit(X, y)
     
     # Save best model
-    save_model(grid_search.best_estimator_, '../models/best_regression_pipeline.pkl')
+    save_model(grid_search.best_estimator_, '../models/best_regression_pipeline_model.pkl')
     
     return grid_search
 
-# Define numerical and categorical features (update with your actual features)
-NUM_FEATURES = ['age', 'education_years', 'hours_worked']
-CAT_FEATURES = ['occupation', 'education_level', 'marital_status']
+# Define numerical and categorical features 
+NUM_FEATURES = ['AGE', 'EDUCATION', 'OCUPATION', 'AREA', 'DUAL.INCOMES', 'UNDER18']
+CAT_FEATURES = ['SEX', 'LANGUAGE', 'MARITAL.STATUS',
+                 "ETHNIC.CLASS", "HOME.TYPE", "HOUSEHOLDER",
+                   "HOUSEHOLD.SIZE", "HOMETYPE"]
+
 
 def build_preprocessor() -> ColumnTransformer:
     """
@@ -225,3 +240,114 @@ def build_preprocessor() -> ColumnTransformer:
                 ('onehot', OneHotEncoder(handle_unknown='ignore'))
             ]), CAT_FEATURES)
         ])
+
+
+
+### FUNCIONES DEL ARCHIVO PIPELINES_II ###
+
+def load_model(file_path: str):
+    """
+    Load trained pipeline from disk
+    
+    Parameters:
+    file_path (str): Path to saved model
+    
+    Returns:
+    Pipeline: Loaded sklearn pipeline
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"No model found at {file_path}")
+        
+    model = joblib.load(file_path)
+    print(f"Successfully loaded model from {file_path}")
+    return model
+
+
+def load_test_data(file_path: str) -> pd.DataFrame:
+    """
+    Load and prepare test dataset
+    
+    Parameters:
+    file_path (str): Path to test CSV file
+    
+    Returns:
+    tuple: (features, target) pandas DataFrames
+    """
+    test_df = pd.read_csv(file_path)
+    print(f"Loaded test data with shape: {test_df.shape}")
+    
+    # Ensure same preprocessing as training
+    X_test = test_df.drop('target', axis=1)
+    y_test = test_df['target']
+    
+    return X_test, y_test
+
+
+def make_predictions(model, X_test: pd.DataFrame) -> np.ndarray:
+    """
+    Generate predictions using trained pipeline
+    
+    Parameters:
+    model: Trained sklearn pipeline
+    X_test (pd.DataFrame): Test features
+    
+    Returns:
+    np.ndarray: Array of predictions
+    """
+    predictions = model.predict(X_test)
+    print(f"Generated {len(predictions)} predictions")
+    return predictions
+
+
+def evaluate_model(y_true: pd.Series, y_pred: np.ndarray, proba_pred: np.ndarray = None):
+    """
+    Calculate evaluation metrics and generate visualizations
+    
+    Parameters:
+    y_true (pd.Series): True target values
+    y_pred (np.ndarray): Model predictions
+    proba_pred (np.ndarray): Predicted probabilities (for classification)
+    """
+    # Classification Metrics
+    if np.issubdtype(y_true.dtype, np.number) and len(np.unique(y_true)) > 2:
+        # Regression Metrics
+        print("Regression Metrics:")
+        print(f"MSE: {mean_squared_error(y_true, y_pred):.3f}")
+        print(f"RMSE: {np.sqrt(mean_squared_error(y_true, y_pred)):.3f}")
+        print(f"R²: {r2_score(y_true, y_pred):.3f}")
+    else:
+        # Classification Metrics
+        print("Classification Metrics:")
+        print(f"Accuracy: {accuracy_score(y_true, y_pred):.3f}")
+        print(f"Precision: {precision_score(y_true, y_pred):.3f}")
+        print(f"Recall: {recall_score(y_true, y_pred):.3f}")
+        print(f"F1 Score: {f1_score(y_true, y_pred):.3f}")
+        
+        if proba_pred is not None:
+            print(f"ROC AUC: {roc_auc_score(y_true, proba_pred):.3f}")
+        
+        print("\nClassification Report:")
+        print(classification_report(y_true, y_pred))
+        
+        # Confusion Matrix Visualization
+        plt.figure(figsize=(8,6))
+        sns.heatmap(confusion_matrix(y_true, y_pred), 
+                    annot=True, fmt='d', cmap='Blues')
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        plt.title('Confusion Matrix')
+        plt.show()
+
+
+def save_results(y_pred: np.ndarray, file_path: str):
+    """
+    Save predictions to CSV file
+    
+    Parameters:
+    y_pred (np.ndarray): Array of predictions
+    file_path (str): Path to save predictions
+    """
+    results_df = pd.DataFrame(y_pred, columns=['predictions'])
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    results_df.to_csv(file_path, index=False)
+    print(f"Predictions saved to {file_path}")
