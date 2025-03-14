@@ -10,8 +10,7 @@ from sklearn.model_selection import GridSearchCV, cross_val_score
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import Lasso
 
-from sklearn.metrics import (mean_squared_error, r2_score, accuracy_score,
-                             precision_score, recall_score, f1_score, roc_auc_score,
+from sklearn.metrics import (mean_squared_error, r2_score,
                              classification_report, confusion_matrix)
 
 import joblib
@@ -34,6 +33,16 @@ def load_data(file_path: str) -> pd.DataFrame:
 
 
 def convert_income(income_str):
+    """
+    Transform the income column into a number
+    in the middle of the range
+
+    Parameters:
+    income_str(str): income values
+
+    Returns:
+    The correct value transformed
+    """
     if pd.isna(income_str):
         return np.nan
     
@@ -69,6 +78,15 @@ def convert_income(income_str):
 
 
 def convert_age(age_str):
+    """
+    Transform the age column values
+
+    Parámeters:
+    age_str(str): values of the columns
+
+    Returns:
+    The correct value transformed
+    """
     if pd.isna(age_str):
         return np.nan
     
@@ -90,7 +108,8 @@ def drop_transform_data(df: pd.DataFrame) -> pd.DataFrame:
     Parameters:
     df (pd.DataFrame): Input dataframe
     
-    Returns
+    Returns:
+    df (pd.DataFrame): Result dataframe
     """
     # Drop columns
     df = df.drop(['UNDER18', 'AREA', 'HOME.TYPE'], axis=1)
@@ -156,7 +175,6 @@ def build_preprocessor() -> ColumnTransformer:
         ])
 
 
-
 def save_model(model, file_path: str):
     """
     Save trained model to disk
@@ -168,7 +186,6 @@ def save_model(model, file_path: str):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     joblib.dump(model, file_path)
     print(f"Model saved to {file_path}")
-
 
 
 def model_pipeline(df: pd.DataFrame):
@@ -259,89 +276,6 @@ def model_pipeline(df: pd.DataFrame):
 NUM_FEATURES = ['AGE', 'EDUCATION', 'DUAL.INCOMES', "HOUSEHOLD.SIZE"]
 CAT_FEATURES = ['SEX', 'LANGUAGE', "ETHNIC.CLASS",
                             "HOUSEHOLDER","MARITAL.STATUS", "OCCUPATION"]
-
-
-
-# CASO ESPECIAL DE CLASIFICACIÓN DESBALANCEADA
-from sklearn.ensemble import RandomForestClassifier
-from imblearn.pipeline import Pipeline as ImbPipeline
-from imblearn.over_sampling import SMOTE
-from sklearn.metrics import balanced_accuracy_score, roc_auc_score
-
-def imbalanced_classification_pipeline():
-    """
-    Pipeline para clasificación desbalanceada
-    """
-    # Load data
-    train_df = load_data('../data/train.csv')
-    X = train_df.drop('rare_class', axis=1)
-    y = train_df['rare_class']  # Ejemplo: clase minoritaria <5%
-    
-    # Pipeline con balanceo
-    pipeline = ImbPipeline(steps=[
-        ('preprocessor', build_preprocessor()),  # Preprocesamiento
-        ('smote', SMOTE(sampling_strategy=0.3)),  # Sobremuestreo
-        ('classifier', RandomForestClassifier(class_weight='balanced'))
-    ])
-    
-    # Parámetros y métricas
-    param_grid = {
-        'classifier__n_estimators': [100, 200],
-        'smote__k_neighbors': [3, 5]
-    }
-    
-    grid_search = GridSearchCV(pipeline, param_grid,
-                             scoring='roc_auc',
-                             cv=5, n_jobs=-1)
-    
-    grid_search.fit(X, y)
-    
-    # Evaluación especial
-    y_pred = grid_search.predict(X)
-    print("Balanced Accuracy:", balanced_accuracy_score(y, y_pred))
-    print("ROC AUC:", roc_auc_score(y, y_pred))
-    
-    save_model(grid_search.best_estimator_, '../models/imbalanced_pipeline.pkl')
-    return grid_search
-
-
-# CASO ESPECIAL DE NO GAUSIANA (POISSON)
-from sklearn.linear_model import PoissonRegressor
-from sklearn.preprocessing import PowerTransformer
-
-def non_gaussian_pipeline():
-    """
-    Pipeline for targets with non-Gaussian distributions
-    """
-    # Load data
-    train_df = load_data('../data/train.csv')
-    X = train_df.drop('count_target', axis=1)
-    y = train_df['count_target']  # Ejemplo: conteos (Poisson distribution)
-    
-    # Pipeline especial
-    pipeline = Pipeline(steps=[
-        ('preprocessor', build_preprocessor()),  # Preprocesamiento
-        ('power_transform', PowerTransformer(method='yeo-johnson')),  # Transformación
-        ('regressor', PoissonRegressor(max_iter=1000))
-    ])
-    
-    # Parámetros para GridSearch
-    param_grid = {
-        'regressor__alpha': [0.1, 1.0],
-        'power_transform__standardize': [True, False]
-    }
-    
-    grid_search = GridSearchCV(pipeline, param_grid, 
-                             scoring='neg_mean_poisson_deviance',
-                             cv=5, n_jobs=-1)
-    
-    grid_search.fit(X, y)
-    
-    print("Best Poisson Regression Params:", grid_search.best_params_)
-    save_model(grid_search.best_estimator_, '../models/poisson_pipeline_model.pkl')
-    
-    return grid_search
-
 
 
 ### FUNCIONES DEL ARCHIVO PIPELINES_II ###
